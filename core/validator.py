@@ -20,22 +20,25 @@ class TriageLevel(str, Enum):
 
 
 # ── Vital ranges (WHO ETAT + START protocol) ─────────────────────────────────
+# RED:    immediately life-threatening threshold
+# YELLOW: outside normal GREEN range but not RED (warrants monitoring)
+# GREEN:  normal/acceptable range
 VITAL_RULES = {
     "hr": {
         "RED":    lambda v: v < 60 or v > 120,
-        "YELLOW": lambda v: 60 <= v <= 120,
+        "YELLOW": lambda v: (60 <= v < 60) or (100 < v <= 120),  # tachycardic but not RED
         "GREEN":  lambda v: 60 <= v <= 100,
         "alert":  "Sepsis/Shock Alert",
     },
     "rr": {
         "RED":    lambda v: v < 10 or v > 30,
-        "YELLOW": lambda v: 10 <= v <= 30,
+        "YELLOW": lambda v: (10 <= v < 12) or (20 < v <= 30),
         "GREEN":  lambda v: 12 <= v <= 20,
         "alert":  "Respiratory Failure",
     },
     "bp_sys": {
         "RED":    lambda v: v < 90,
-        "YELLOW": lambda v: 90 <= v <= 140,
+        "YELLOW": lambda v: 90 <= v < 110 or v > 130,
         "GREEN":  lambda v: 110 <= v <= 130,
         "alert":  "Hypovolemic Shock",
     },
@@ -56,7 +59,7 @@ VITAL_RULES = {
 # Hard-stop domains — always route to specialist protocol
 SPECIALIST_DOMAINS = [
     "obstetric", "ob/gyn", "labour", "labor", "delivery",
-    "psychiatric", "suicide", "psychosis",
+    "psychiatric", "suicide", "suicidal", "ideation", "psychosis",
     "paediatric dosing", "pediatric dosing", "weight-based",
     "neonatal",
 ]
@@ -119,11 +122,12 @@ class DeterministicValidator:
             elif rules["YELLOW"](val):
                 yellow_flags += 1
 
-        # Classify
+        # Classify — WHO ETAT: any single abnormal vital = YELLOW minimum
         if red_flags >= 1:
             level = TriageLevel.RED
             conf  = min(0.95, 0.70 + (red_flags * 0.08))
-        elif yellow_flags >= 2:
+        elif yellow_flags >= 1:
+            # Any vital outside normal range → YELLOW (safe conservative default)
             level = TriageLevel.YELLOW
             conf  = 0.75
         elif total_checked == 0:
@@ -131,6 +135,7 @@ class DeterministicValidator:
             level = TriageLevel.YELLOW
             conf  = 0.40
         else:
+            # All vitals checked AND all within GREEN range
             level = TriageLevel.GREEN
             conf  = 0.85
 
@@ -213,14 +218,17 @@ class DeterministicValidator:
 
     def _compile_dosage_pattern(self) -> list[str]:
         """
-        Build regex patterns from hard_limits.json blocked_dosages list.
+        Always include baseline safety patterns + any blocked_dosages from hard_limits.json.
+        Baseline catches: mg/kg weight-based doses + large flat doses >= 500mg.
         """
-        if not self._limits or "blocked_dosages" not in self._limits:
-            # Fallback: flag any numeric mg/kg or mg dose pattern for review
-            return [
-                r"\d+\s*mg/kg",
-                r"\d+\.?\d*\s*mg\b",
-                r"\d+\s*mcg/kg",
-                r"\d+\s*mmol",
-            ]
-        return [re.escape(d) for d in self._limits["blocked_dosages"]]
+        baseline = [
+            r"\d+\s*mg/kg",
+            r"\d+\.?\d*\s*mcg/kg",
+            r"\d+\s*mmol",
+            r"[5-9]\d{2,}\s*mg\b",   # 500mg-999mg flat dose
+            r"\d{4,}\s*mg\b",         # 1000mg+
+        ]
+        if self._limits and "blocked_dosages" in self._limits:
+            extra = [re.escape(d) for d in self._limits["blocked_dosages"]]
+            return list(set(baseline + extra))
+        return baseline

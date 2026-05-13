@@ -289,11 +289,17 @@ async def system_health():
 async def _fetch_rag_context(description: str, det: ValidationResult) -> str:
     query = f"triage {det.deterministic_level.value} {description}"
     try:
+        from core.embedder import embed
+        vector = await embed(query)
         async with httpx.AsyncClient(timeout=3) as client:
             r = await client.post(
                 f"{QDRANT_URL}/collections/rescuenet_protocols/points/search",
-                json={"vector": [0.0] * 384, "limit": 3,  # placeholder vector
-                      "with_payload": True, "query_vector": query},
+                json={
+                    "vector": vector,
+                    "limit": 3,
+                    "with_payload": True,
+                    "score_threshold": 0.4,
+                },
             )
             hits = r.json().get("result", [])
             return "\n".join(h["payload"].get("text", "") for h in hits)

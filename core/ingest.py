@@ -15,10 +15,10 @@ from sentence_transformers import SentenceTransformer
 
 QDRANT_URL      = "http://qdrant:6333"
 COLLECTION      = "rescuenet_protocols"
-EMBED_MODEL     = "BAAI/bge-small-en-v1.5"   # 45MB — fits edge hardware
+EMBED_MODEL     = "nomic-embed-text"          # pulled by model-init — 274MB
 CHUNK_SIZE      = 400    # tokens approx
 CHUNK_OVERLAP   = 80
-VECTOR_DIM      = 384
+VECTOR_DIM      = 768    # nomic-embed-text output dimension
 PROTOCOLS_DIR   = Path("data/protocols")
 BATCH_SIZE      = 32
 

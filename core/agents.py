@@ -278,13 +278,19 @@ async def run_triage(
 # ── Helpers ───────────────────────────────────────────────────────────────────
 async def _qdrant_search(query: str, limit: int = 3) -> list[str]:
     try:
+        from core.embedder import embed
+        vector = await embed(query)
         async with httpx.AsyncClient(timeout=3) as client:
-            # Use Qdrant's text search (BM25 sparse or dense)
             r = await client.post(
-                f"{QDRANT_URL}/collections/rescuenet_protocols/points/scroll",
-                json={"limit": limit, "with_payload": True},
+                f"{QDRANT_URL}/collections/rescuenet_protocols/points/search",
+                json={
+                    "vector": vector,
+                    "limit": limit,
+                    "with_payload": True,
+                    "score_threshold": 0.4,
+                },
             )
-            hits = r.json().get("result", {}).get("points", [])
+            hits = r.json().get("result", [])
             return [h["payload"].get("text", "") for h in hits]
     except Exception:
         return []

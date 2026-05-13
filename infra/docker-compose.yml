@@ -128,7 +128,7 @@ services:
     entrypoint: >
       sh -c "ollama pull gemma4:2b &&
              ollama pull nomic-embed-text &&
-             echo 'Models ready'"
+             echo 'Models ready: gemma4:2b + nomic-embed-text'"
     restart: "no"
     networks:
       - rescuenet

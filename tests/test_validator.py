@@ -11,16 +11,6 @@ from core.validator import (
     VitalSigns,
 )
 
-v = DeterministicValidator.__new__(DeterministicValidator)
-v._limits = {}
-v._dosage_pattern = v._compile_dosage_pattern(v)
-validator = DeterministicValidator.__new__(DeterministicValidator)
-validator._limits = {
-    "blocked_dosages": ["10mg/kg", "20mg/kg"],
-    "approved_protocols": ["WHO_ETAT_2016"],
-}
-validator._dosage_pattern = [r"\b10\s*mg/kg\b", r"\b20\s*mg/kg\b"]
-
 
 # ── Vital sign classification ──────────────────────────────────────────────
 class TestVitalClassification:
@@ -54,7 +44,9 @@ class TestVitalClassification:
         assert self._check(bp_sys=85) == TriageLevel.RED
 
     def test_bp_exactly_90_is_yellow(self):
-        assert self._check(bp_sys=90) == TriageLevel.YELLOW
+        """BP=90 is boundary of YELLOW range — single abnormal vital → YELLOW"""
+        result = DeterministicValidator().check_vitals(VitalSigns(bp_sys=90))
+        assert result.deterministic_level == TriageLevel.YELLOW
 
     def test_bp_normal_is_green(self):
         assert self._check(bp_sys=120) == TriageLevel.GREEN
@@ -146,15 +138,28 @@ class TestSpecialistHardStop:
 # ── Dosage guard ───────────────────────────────────────────────────────────
 class TestDosageGuard:
 
-    def test_blocked_dosage_flagged(self):
+    def test_blocked_dosage_mg_per_kg_flagged(self):
+        """Regex fallback catches generic mg/kg patterns"""
         val = DeterministicValidator()
         safe, blocked = val.validate_dosage("Administer 10mg/kg morphine IV")
         assert safe is False
         assert len(blocked) > 0
 
+    def test_blocked_mg_dose_flagged(self):
+        val = DeterministicValidator()
+        safe, blocked = val.validate_dosage("Give 500mg IV bolus immediately")
+        assert safe is False
+        assert len(blocked) > 0
+
     def test_safe_text_passes(self):
         val = DeterministicValidator()
-        safe, blocked = val.validate_dosage("Ensure airway, control haemorrhage")
+        safe, blocked = val.validate_dosage("Ensure airway, control haemorrhage, apply tourniquet")
+        assert safe is True
+        assert blocked == []
+
+    def test_empty_string_is_safe(self):
+        val = DeterministicValidator()
+        safe, blocked = val.validate_dosage("")
         assert safe is True
         assert blocked == []
 

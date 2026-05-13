@@ -1,0 +1,28 @@
+{
+  "_comment": "WHO ETAT 2016 + Red Cross Field Manual hard limits. Do not modify without medical review.",
+  "blocked_dosages": [
+    "10mg/kg", "20mg/kg", "50mg/kg",
+    "1000mg", "2000mg", "500mg/kg"
+  ],
+  "max_single_dose_mg": 500,
+  "approved_protocols": [
+    "WHO_ETAT_2016",
+    "START_TRIAGE",
+    "SALT_TRIAGE",
+    "RED_CROSS_FIELD_MANUAL_2022",
+    "SPHERE_HANDBOOK_2018"
+  ],
+  "vital_thresholds": {
+    "hr":     { "red_low": 60,  "red_high": 120, "green_low": 60, "green_high": 100 },
+    "rr":     { "red_low": 10,  "red_high": 30,  "green_low": 12, "green_high": 20  },
+    "bp_sys": { "red_low": 90,  "red_high": 999, "green_low": 110,"green_high": 130 },
+    "spo2":   { "red_low": 90,  "red_high": 100, "green_low": 95, "green_high": 100 },
+    "gcs":    { "red_low": 0,   "red_high": 8,   "green_low": 14, "green_high": 15  }
+  },
+  "specialist_hard_stops": [
+    "obstetric", "ob/gyn", "labour", "labor", "delivery",
+    "psychiatric", "suicide", "psychosis",
+    "pediatric dosing", "paediatric dosing", "weight-based dosing",
+    "neonatal", "toxicology"
+  ]
+}

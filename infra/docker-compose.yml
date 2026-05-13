@@ -1,0 +1,142 @@
+version: "3.9"
+
+# ── RescueNet — Medical Edge Appliance ───────────────────────────────────────
+# Service start order: ollama → qdrant → redis → fastapi
+# Memory locked to 3.5GB total — fits Jetson Nano (4GB) and RPi 5 (8GB)
+# runtime: nvidia — comment out for CPU-only (RPi / no-GPU)
+
+services:
+
+  # ── Priority 1: Model inference ─────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: rescuenet-ollama
+    restart: unless-stopped
+    runtime: nvidia                        # GPU passthrough — remove for CPU
+    environment:
+      - OLLAMA_NUM_PARALLEL=1
+      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_KEEP_ALIVE=24h
+      - OLLAMA_CONTEXT_LENGTH=2048         # KV-cache optimised window
+    volumes:
+      - ollama_models:/root/.ollama
+    mem_limit: 3.5gb
+    shm_size: 2gb                          # Shared mem for VRAM paging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rescuenet
+
+  # ── Priority 2: Vector store ─────────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: rescuenet-qdrant
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - qdrant_data:/qdrant/storage
+      - ./data/protocols:/qdrant/protocols:ro   # WHO/Red Cross manuals
+    mem_limit: 512mb
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__STORAGE__ON_DISK_PAYLOAD=true   # Low RAM mode
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rescuenet
+
+  # ── Redis: protocol cache ────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: rescuenet-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    mem_limit: 300mb
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+    networks:
+      - rescuenet
+
+  # ── Priority 3: API gateway ──────────────────────────────────────────────
+  fastapi:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.api
+    container_name: rescuenet-api
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data:ro
+      - /sys/class/thermal:/sys/class/thermal:ro   # CPU temp telemetry
+    mem_limit: 512mb
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://redis:6379
+      - GEMMA_MODEL=gemma4:2b
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/system/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - rescuenet
+
+  # ── Frontend PWA ─────────────────────────────────────────────────────────
+  web:
+    build:
+      context: apps/web
+      dockerfile: Dockerfile
+    container_name: rescuenet-web
+    restart: unless-stopped
+    depends_on:
+      - fastapi
+    ports:
+      - "3000:3000"
+    mem_limit: 256mb
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_OFFLINE_MODE=true
+    networks:
+      - rescuenet
+
+  # ── Model bootstrap: pull gemma4:2b on first run ─────────────────────────
+  model-init:
+    image: ollama/ollama:latest
+    container_name: rescuenet-model-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "ollama pull gemma4:2b &&
+             ollama pull nomic-embed-text &&
+             echo 'Models ready'"
+    restart: "no"
+    networks:
+      - rescuenet
+
+volumes:
+  ollama_models:
+  qdrant_data:
+
+networks:
+  rescuenet:
+    driver: bridge

@@ -30,7 +30,7 @@ A **medical edge appliance** running Gemma 4 2B entirely on-device — no intern
 Patient Vitals → Deterministic WHO Rules → Gemma 4 Contextualisation → Actionable Protocol
 ```
 
-**Not a chatbot. A Clinical Decision Support System (CDSS).**
+**Not a chatbot.No a tool. A Clinical Decision Support System (CDSS).**
 
 | Feature | Description |
 |---------|-------------|
@@ -46,7 +46,8 @@ Patient Vitals → Deterministic WHO Rules → Gemma 4 Contextualisation → Act
 
 ## Quickstart
 
-```bash
+```
+bash
 git clone https://github.com/malikatemz/Offline-AI-medical-triage-for-zero-connectivity-disaster-zones
 cd Offline-AI-medical-triage-for-zero-connectivity-disaster-zones
 docker compose -f infra/docker-compose.yml up
@@ -55,7 +56,8 @@ docker compose -f infra/docker-compose.yml up
 First run pulls `gemma4:2b` (~1.5GB) and `nomic-embed-text` automatically via `model-init` service.
 
 **Ingest WHO protocols into Qdrant:**
-```bash
+```
+bash
 docker exec rescuenet-api python -m core.ingest
 ```
 
@@ -65,7 +67,8 @@ http://localhost:3000
 ```
 
 **Run tests:**
-```bash
+```
+bash
 pytest tests/test_validator.py -v
 ```
 
